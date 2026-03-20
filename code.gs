@@ -6,6 +6,7 @@ const ID_SS_ABSEN = "1glP7Tp5uYRgfKn4ZDJgpIlkYxOrIbWk2gzGxUSELlSw";
 const NAMA_SHEET_ABSEN = "Log_Absen";
 const NAMA_SHEET_APPROVAL = "Approval"; 
 const NAMA_SHEET_LIBUR = "Libur"; // --- TAMBAHAN: Nama sheet untuk hari libur ---
+const NAMA_SHEET_NOTIFIKASI = "PEMBERITAHUAN";
 
 const TIMEZONE = "Asia/Jayapura";
 
@@ -54,6 +55,9 @@ function doPost(e) {
     else if (request.action == "get_active_leaves") return getActiveLeaves();
     else if (request.action == "force_finish") return forceFinishLeave(request);
     
+    // 4. NOTIFIKASI
+    else if (request.action == "get_notification") return getNotification();
+
     else return createJsonResponse({ status: "error", message: "Action tidak dikenal!" });
   } catch (error) {
     return createJsonResponse({ status: "error", message: "SERVER ERROR: " + error.toString() });
@@ -462,6 +466,28 @@ function cekHariLibur() {
   return { isLibur: false, namaLibur: "", tglSelesaiStr: "" };
 }
 // ----------------------------------------
+
+// --- FITUR BARU: Ambil Notifikasi ---
+function getNotification() {
+  const ss = SpreadsheetApp.openById(ID_SS_ABSEN);
+  const sheet = ss.getSheetByName(NAMA_SHEET_NOTIFIKASI);
+
+  if (!sheet) return createJsonResponse({ status: "empty", message: "" });
+
+  // Ambil isi baris 2 kolom A (asumsi header di baris 1, pesan di baris 2)
+  // Atau baris paling bawah yang ada isinya. Kita ambil baris terakhir saja:
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return createJsonResponse({ status: "empty", message: "" });
+
+  const data = sheet.getRange(lastRow, 1).getValue();
+
+  // Jika kosong, kembalikan string kosong
+  if (!data || String(data).trim() === "") {
+     return createJsonResponse({ status: "empty", message: "" });
+  }
+
+  return createJsonResponse({ status: "success", message: String(data).trim() });
+}
 
 function createJsonResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
 function formatTimestampToIndonesian(date) { return Utilities.formatDate(date, TIMEZONE, "dd/MM/yyyy H:mm:ss"); }

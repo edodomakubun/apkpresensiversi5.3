@@ -54,7 +54,8 @@ function initializeUIReferences() {
         'helpBtn', 'helpModal', 'closeHelpModalBtn', 'contactWhatsAppBtn','bacapanduanbtn',
         'izinBtn', 'izinModal', 'closeIzinModalBtn', 'izinForm', 'izinType', 'izinReason', 'submitIzinBtn',
         'statsMonthName', 'statHadir', 'statTelat', 'statIzin',
-        'dailyList', 'submissionSection', 'submissionList', 'testNotifBtn'
+        'dailyList', 'submissionSection', 'submissionList', 'testNotifBtn',
+        'notificationBadge', 'notificationDot', 'notificationModal', 'notificationMessage'
     ];
     ids.forEach(id => ui[id] = document.getElementById(id));
 }
@@ -410,7 +411,7 @@ async function checkUserSession() {
     const userSession = await AppStorage.loadUserSession();
     if (userSession) {
         appState.currentUser = userSession; ui.loginPage.classList.add('hidden'); ui.loginSuccessView.classList.add('hidden'); ui.mainApp.classList.remove('hidden');
-        switchTab('homeTab'); updateProfileData(); if (autoSyncInterval) clearInterval(autoSyncInterval); autoSyncInterval = setInterval(handleSync, 120000);
+        switchTab('homeTab'); updateProfileData(); fetchNotification(); if (autoSyncInterval) clearInterval(autoSyncInterval); autoSyncInterval = setInterval(handleSync, 120000);
     } else { ui.mainApp.classList.add('hidden'); ui.loginPage.classList.remove('hidden'); ui.loginForm.classList.remove('hidden'); }
 }
 
@@ -742,10 +743,49 @@ function updateStatsUI(hadir, telat, izin) {
 async function handleSync() {
     ui.syncBtn.disabled = true; ui.syncIcon.classList.add('hidden'); ui.syncSpinner.classList.remove('hidden');
     showToast("Menyinkronkan...");
-    try { await loadAttendanceHistory(true); await updateSmartDashboard(); showToast("Tersinkron!"); } 
+    try { await loadAttendanceHistory(true); await updateSmartDashboard(); await fetchNotification(); showToast("Tersinkron!"); }
     catch (e) { showToast("Gagal Sync"); }
     finally { ui.syncBtn.disabled = false; ui.syncIcon.classList.remove('hidden'); ui.syncSpinner.classList.add('hidden'); }
 }
+
+// --- FITUR NOTIFIKASI ---
+async function fetchNotification() {
+    try {
+        const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_notification' }) });
+        const result = await res.json();
+        if (result.status === 'success' && result.message) {
+            ui.notificationMessage.textContent = result.message;
+
+            // Cek apakah pesan sudah pernah dibaca
+            const lastRead = localStorage.getItem('last_read_notification');
+            if (lastRead !== result.message) {
+                ui.notificationDot.classList.remove('hidden'); // Tampilkan titik merah
+            } else {
+                ui.notificationDot.classList.add('hidden');
+            }
+        } else {
+            ui.notificationMessage.textContent = "Belum ada pemberitahuan.";
+            ui.notificationDot.classList.add('hidden');
+        }
+    } catch (e) {
+        console.warn("Gagal load notifikasi:", e);
+    }
+}
+
+function showNotificationModal() {
+    // Sembunyikan titik merah dan simpan status sudah dibaca
+    ui.notificationDot.classList.add('hidden');
+    const msg = ui.notificationMessage.textContent;
+    if (msg && msg !== "Belum ada pemberitahuan.") {
+        localStorage.setItem('last_read_notification', msg);
+    }
+    showModal('notificationModal');
+}
+
+function hideNotificationModal() {
+    hideModal('notificationModal');
+}
+
 
 function createLoadingCard(title, sub) { return `<div class="p-10 text-center"><div class="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div><h3 class="font-bold text-lg">${title}</h3><p class="text-sm text-slate-500">${sub}</p></div>`; }
 function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
