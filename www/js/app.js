@@ -520,18 +520,43 @@ function openCamera() {
 function stopScanner() { if (html5QrCode) html5QrCode.stop().then(() => html5QrCode.clear()).catch(e => {}); hideModal('scanModal'); }
 
 async function handleScanSuccess(decodedText) {
-    stopScanner(); ui.smartDashboard.innerHTML = createLoadingCard("Memproses...", "Mengirim data...");
+    stopScanner();
+    ui.smartDashboard.innerHTML = createLoadingCard("Mendapatkan Lokasi...", "Mohon tunggu sebentar...");
+
     if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-            try {
-                const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action: 'absen', namaGuru: appState.currentUser.nama, latitude: pos.coords.latitude, longitude: pos.coords.longitude }) });
-                const result = await res.json();
-                if(result.status === 'success') { if(typeof Tone !== 'undefined') playSuccessSound(); alert("BERHASIL!\n\n" + result.message); }
-                else { if(typeof Tone !== 'undefined') playErrorSound(); alert("GAGAL!\n\n" + result.message); }
-                await loadAttendanceHistory(true); updateSmartDashboard();
-            } catch (e) { alert("Error: " + e.message); updateSmartDashboard(); }
-        }, (err) => { alert("GPS Error!"); updateSmartDashboard(); }, { enableHighAccuracy: true, timeout: 15000 });
-    } else { alert("No GPS"); updateSmartDashboard(); }
+        // Coba dengan high accuracy dulu
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => { sendAttendance(pos.coords.latitude, pos.coords.longitude); },
+            (err) => {
+                console.warn("High Accuracy GPS failed, trying Low Accuracy. Error:", err);
+                // Fallback ke low accuracy (network/wifi based) jika GPS bermasalah
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => { sendAttendance(pos.coords.latitude, pos.coords.longitude); },
+                    (err2) => {
+                        let errMsg = "GPS Error!";
+                        if (err2.code === 1) errMsg = "Akses GPS Ditolak!";
+                        else if (err2.code === 2) errMsg = "Sinyal GPS Tidak Ditemukan!";
+                        else if (err2.code === 3) errMsg = "Waktu Habis Mencari Sinyal GPS!";
+                        alert(errMsg + "\nPastikan GPS menyala dan aplikasi memiliki izin lokasi.");
+                        updateSmartDashboard();
+                    },
+                    { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 }
+                );
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    } else { alert("Perangkat tidak mendukung GPS."); updateSmartDashboard(); }
+}
+
+async function sendAttendance(lat, lng) {
+    ui.smartDashboard.innerHTML = createLoadingCard("Memproses Absen...", "Mengirim data ke server...");
+    try {
+        const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action: 'absen', namaGuru: appState.currentUser.nama, latitude: lat, longitude: lng }) });
+        const result = await res.json();
+        if(result.status === 'success') { if(typeof Tone !== 'undefined') playSuccessSound(); alert("BERHASIL!\n\n" + result.message); }
+        else { if(typeof Tone !== 'undefined') playErrorSound(); alert("GAGAL!\n\n" + result.message); }
+        await loadAttendanceHistory(true); updateSmartDashboard();
+    } catch (e) { alert("Koneksi Error: " + e.message); updateSmartDashboard(); }
 }
 
 async function handleIzinSubmit(e) {
